@@ -36,17 +36,19 @@ def test_ball_update_placeholder():
     # TODO: Až bude implementováno, otestovat skutečný pohyb
 
 
-def test_ball_reset_placeholder():
-    """Test že reset metoda existuje (implementace později)."""
+def test_ball_reset():
+    """Reset vrací míček do středu dle settings (signature bez parametrů)."""
     ball = Ball(x=100, y=100)
-    # Zatím jen kontrola, že metoda nehodí chybu
-    ball.reset(50, 50)
-    # TODO: Až bude implementováno, otestovat reset
+    ball.reset()
+    # Kontrolu konkrétní hodnoty řeší samostatný test v test_ball_movement.py (reset_center)
+    assert isinstance(ball.x, float)
+    assert isinstance(ball.y, float)
 
 
 def test_ball_reverse_methods():
-    """Test že metody pro odraz existují."""
-    ball = Ball(x=50, y=50, vx=5, vy=5)
+    """reverse_x / reverse_y invertují příslušné rychlosti."""
+    ball = Ball(x=50, y=50, vx=5, vy=-7)
     ball.reverse_x()
+    assert ball.vx == -5
     ball.reverse_y()
-    # TODO: Až bude implementováno, otestovat změnu směru
+    assert ball.vy == 7

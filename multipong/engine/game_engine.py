@@ -69,45 +69,69 @@ class MultipongEngine:
             player_id="B1"
         )
     
-    def update(self, inputs: Dict[str, Dict[str, bool]]) -> None:
-        """Hlavní aktualizační smyčka enginu (placeholder logika).
+    def update(self, inputs: Optional[Dict[str, Dict[str, bool]]] = None) -> None:
+        """Aktualizační smyčka enginu.
 
-        Args:
-            inputs: Slovník vstupů od hráčů
-                    Formát: {"A1": {"up": bool, "down": bool}, ...}
+        Pokud nejsou předány vstupy (inputs is None), pokusí se přečíst stav klávesnice
+        přes pygame (W/S pro levou pálku, šipky nahoru/dolů pro pravou). To vnáší
+        závislost na pygame – tolerováno ve Phase 1–2.
         """
-        # Pohyb pálek (dočasná jednoduchá implementace)
+        # Volitelný vstup z pygame
+        if inputs is None:
+            try:  # pragma: no cover - přístup k reálné klávesnici mimo testy
+                import pygame
+                keys = pygame.key.get_pressed()
+                inputs = {
+                    "A1": {"up": keys[pygame.K_w], "down": keys[pygame.K_s]},
+                    "B1": {"up": keys[pygame.K_UP], "down": keys[pygame.K_DOWN]},
+                }
+            except Exception:
+                inputs = {"A1": {"up": False, "down": False}, "B1": {"up": False, "down": False}}
+
+        # Pohyb pálek pomocí metod Paddle
         for pid, paddle in self.paddles.items():
-            player_inp = inputs.get(pid, {})
+            player_inp = inputs.get(pid, {}) if inputs else {}
             if player_inp.get("up"):
-                paddle.y -= paddle.speed
+                paddle.move_up()
             if player_inp.get("down"):
-                paddle.y += paddle.speed
-            # Omezit na arénu
-            if paddle.y < 0:
-                paddle.y = 0
-            if paddle.y + paddle.height > self.arena.height:
-                paddle.y = self.arena.height - paddle.height
+                paddle.move_down()
+            paddle.update(self.arena.height)
 
-        # Pohyb míčku (velmi jednoduchý placeholder)
-        self.ball.x += self.ball.vx
-        self.ball.y += self.ball.vy
+        # Pohyb míčku – využij vnitřní logiku Ball.update pro vertikální odrazy
+        self.ball.update()
 
-        # Odraz od horní / dolní stěny
-        if self.ball.y - self.ball.radius < 0 or self.ball.y + self.ball.radius > self.arena.height:
-            self.ball.vy = -self.ball.vy
+        # Horizontální odraz od levé / pravé stěny (zatím bez skórování)
+        if self.ball.x - self.ball.radius < 0:
+            self.ball.x = self.ball.radius
+            self.ball.reverse_x()
+        elif self.ball.x + self.ball.radius > self.arena.width:
+            self.ball.x = self.arena.width - self.ball.radius
+            self.ball.reverse_x()
 
-        # Odraz od levé / pravé stěny (zatím bez skóre)
-        if self.ball.x - self.ball.radius < 0 or self.ball.x + self.ball.radius > self.arena.width:
-            self.ball.vx = -self.ball.vx
-
-        # Jednoduchá kolize s pálkami (pouze horizontální odraz)
+        # Kolize míček–pálka (axis-aligned bounding box vs. kruh zjednodušeně):
         left = self.paddles.get("A1")
-        right = self.paddles.get("B1")
-        if left and (self.ball.x - self.ball.radius < left.x + left.width and left.y < self.ball.y < left.y + left.height):
+        if left and self._ball_hits_paddle(left):
+            # Ujisti se, že míček se po odrazu pohybuje doprava
             self.ball.vx = abs(self.ball.vx)
-        if right and (self.ball.x + self.ball.radius > right.x and right.y < self.ball.y < right.y + right.height):
+            # Posuň míček ven z pálky, aby nedošlo k vícenásobnému odrazu
+            self.ball.x = left.x + left.width + self.ball.radius
+
+        right = self.paddles.get("B1")
+        if right and self._ball_hits_paddle(right):
             self.ball.vx = -abs(self.ball.vx)
+            self.ball.x = right.x - self.ball.radius
+
+    def _ball_hits_paddle(self, paddle: Paddle) -> bool:
+        """Jednoduchá detekce kolize míčku s pálkou.
+
+        Aproximace: testujeme zda horizontální projekce kruhu zasahuje obdélník a
+        střed míčku leží ve vertikálním rozsahu pálky.
+        """
+        return (
+            paddle.y <= self.ball.y <= paddle.y + paddle.height and
+            self.ball.x + self.ball.radius >= paddle.x and
+            self.ball.x - self.ball.radius <= paddle.x + paddle.width
+        )
     
     def update_paddles(self, inputs: Dict[str, Dict[str, bool]]) -> None:
         """
@@ -151,9 +175,10 @@ class MultipongEngine:
         pass
     
     def reset_ball(self) -> None:
-        """Resetuje míček do středu arény."""
-        # TODO: Implementovat reset míčku
-        pass
+        """Reset míčku do středu arény + základní rychlost zachována."""
+        cx, cy = self.arena.get_center()
+        self.ball.x = cx
+        self.ball.y = cy
     
     def start(self) -> None:
         """Spustí hru."""

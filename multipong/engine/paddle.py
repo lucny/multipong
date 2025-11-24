@@ -47,34 +47,25 @@ class Paddle:
         self.player_id = player_id
     
     def move_up(self) -> None:
-        """Posune pálku nahoru."""
-        # TODO: Implementovat pohyb nahoru
-        pass
-    
+        """Posune pálku nahoru o konstantní rychlost."""
+        self.y -= self.speed
+
     def move_down(self) -> None:
-        """Posune pálku dolů."""
-        # TODO: Implementovat pohyb dolů
-        pass
-    
+        """Posune pálku dolů o konstantní rychlost."""
+        self.y += self.speed
+
     def update(self, arena_height: int = 600) -> None:
         """
-        Aktualizuje pálku a omezí pohyb v rámci arény.
-        
-        Args:
-            arena_height: Výška arény pro omezení pohybu
+        Aktualizace pálky – omezí ji na prostor arény.
         """
-        # TODO: Implementovat omezení pohybu
-        pass
-    
+        self.clamp_to_arena(arena_height)
+
     def clamp_to_arena(self, arena_height: int) -> None:
-        """
-        Omezí pohyb pálky v rámci arény.
-        
-        Args:
-            arena_height: Výška arény
-        """
-        # TODO: Implementovat clamping
-        pass
+        """Zabrání pálce opustit arénu."""
+        if self.y < 0:
+            self.y = 0
+        if self.y + self.height > arena_height:
+            self.y = arena_height - self.height
     
     def to_dict(self) -> Dict[str, any]:
         """
@@ -93,12 +84,12 @@ class Paddle:
     
     def draw(self, surface) -> None:
         """
-        Vykreslí pálku na surface (Pygame).
-        POZNÁMKA: Podle architektury by draw() mělo být v UI vrstvě,
-        ale pro jednoduchost Phase 1-2 zde jako placeholder.
-        
-        Args:
-            surface: Pygame surface pro vykreslení
+        Placeholder pro vykreslení pálky.
+        V Phase 1–2 lze kreslit přímo zde.
         """
-        # TODO: Implementovat vykreslení (nebo přesunout do UI vrstvy)
-        pass
+        import pygame
+        pygame.draw.rect(
+            surface,
+            (255, 255, 255),
+            pygame.Rect(self.x, self.y, self.width, self.height)
+        )
