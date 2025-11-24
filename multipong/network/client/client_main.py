@@ -30,15 +30,19 @@ def main() -> None:
     """Spustí hlavní Pygame smyčku klienta."""
     pygame.init()
 
-    # Rozměry z enginu (arénu vytvoříme nejdříve)
-    engine = MultipongEngine(arena_width=1200, arena_height=800)
+    # TESTOVACÍ REŽIM: pouze 1 hráč na tým (A1 vs B1)
+    engine = MultipongEngine(arena_width=1200, arena_height=800, num_players_per_team=1)
     engine.start()
 
     # Vytvoř input handler (dependency injection)
     input_handler = PygameInputHandler()
 
     screen = pygame.display.set_mode((engine.arena.width, engine.arena.height))
-    pygame.display.set_caption("MULTIPONG – Client Demo")
+    pygame.display.set_caption("MULTIPONG – Test Режim (A1 vs B1) – ESC=konec, R=reset")
+    
+    # Font pro zobrazení skóre
+    pygame.font.init()
+    font = pygame.font.SysFont("Arial", 48)
 
     clock = pygame.time.Clock()
 
@@ -48,8 +52,12 @@ def main() -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                elif event.key == pygame.K_r:
+                    # Reset hry
+                    engine.reset()
 
         # Vstupy pomocí input handleru (dependency inversion)
         inputs = input_handler.get_inputs()
@@ -57,8 +65,24 @@ def main() -> None:
         # Logika
         engine.update(inputs)
 
-        # Vykreslení (engine si pokryje vše v draw)
+        # Vykreslení
         engine.draw(screen)
+        
+        # Zobrazení skóre na obrazovce + případná pauza po gólu
+        score_text = f"{engine.team_left.score} : {engine.team_right.score}"
+        pause_remaining = engine.get_goal_pause_remaining() if hasattr(engine, "get_goal_pause_remaining") else 0.0
+        if pause_remaining > 0:
+            score_text += f"  (GOAL – restart za {pause_remaining:0.1f}s)"
+        text_surface = font.render(score_text, True, (255, 255, 255))
+        text_rect = text_surface.get_rect(center=(engine.arena.width // 2, 50))
+        screen.blit(text_surface, text_rect)
+        
+        # Zobrazení nápovědy
+        help_font = pygame.font.SysFont("Arial", 20)
+        help_text = "W/S = Levá pálka (team_left) | ↑/↓ = Pravá pálka (team_right) | R = Reset | ESC = Konec"
+        help_surface = help_font.render(help_text, True, (180, 180, 180))
+        help_rect = help_surface.get_rect(center=(engine.arena.width // 2, engine.arena.height - 30))
+        screen.blit(help_surface, help_rect)
 
         pygame.display.flip()
         clock.tick(FPS)
