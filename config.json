@@ -1,4 +1,23 @@
 {
   "goal_size": 400,
-  "goal_pause_seconds": 1.0
+  "goal_pause_seconds": 1.0,
+  "paddle_height": 50,
+  "paddles_unrestricted_y": true,
+  "paddle_heights": {
+    "A1": 50,
+    "A2": 0,
+    "A3": 40,
+    "A4": 50,
+    "B1": 50,
+    "B2": 40,
+    "B3": 0,
+    "B4": 50
+  },
+  "ball_speed_decay": 1,
+  "ball_speed_decay_x": 1,
+  "ball_speed_decay_y": 1,
+  "ball_speed_max": 12.0,
+  "paddle_hit_stretch": 1.3,
+  "paddle_stretch_decay": 0.92,
+  "rally_adapt_factor": 0.05
 }

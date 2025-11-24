@@ -30,8 +30,8 @@ def main() -> None:
     """Spustí hlavní Pygame smyčku klienta."""
     pygame.init()
 
-    # TESTOVACÍ REŽIM: pouze 1 hráč na tým (A1 vs B1)
-    engine = MultipongEngine(arena_width=1200, arena_height=800, num_players_per_team=1)
+    # SIMULACE 4v4: A1 a B1 ovládá hráč, ostatní pálky (A2-A4, B2-B4) řídí jednoduché AI v engine
+    engine = MultipongEngine(arena_width=1200, arena_height=800, num_players_per_team=4)
     engine.start()
 
     # Vytvoř input handler (dependency injection)
@@ -79,7 +79,19 @@ def main() -> None:
         
         # Zobrazení nápovědy
         help_font = pygame.font.SysFont("Arial", 20)
-        help_text = "W/S = Levá pálka (team_left) | ↑/↓ = Pravá pálka (team_right) | R = Reset | ESC = Konec"
+        help_text = "Aktivní: A1=W/S, B1=↑/↓ | Ostatní AI | R=reset | ESC=konec"
+        # Volitelný minioverlay statistik zásahů
+        stats_font = pygame.font.SysFont("Arial", 16)
+        y_stats = 90
+        for paddle in engine.team_left.paddles:
+            txt = stats_font.render(f"{paddle.player_id} hits={paddle.stats.hits}", True, (170,170,170))
+            screen.blit(txt, (20, y_stats))
+            y_stats += 18
+        y_stats = 90
+        for paddle in engine.team_right.paddles:
+            txt = stats_font.render(f"{paddle.player_id} hits={paddle.stats.hits}", True, (170,170,170))
+            screen.blit(txt, (engine.arena.width - 160, y_stats))
+            y_stats += 18
         help_surface = help_font.render(help_text, True, (180, 180, 180))
         help_rect = help_surface.get_rect(center=(engine.arena.width // 2, engine.arena.height - 30))
         screen.blit(help_surface, help_rect)

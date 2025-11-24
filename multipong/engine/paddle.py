@@ -58,6 +58,12 @@ class Paddle:
         self.zone_top = zone_top
         self.zone_bottom = zone_bottom
         self.stats = stats if stats is not None else PlayerStats(player_id)
+        # Animace po zásahu (stretch efekt) – parametry z konfigurace
+        from multipong import settings  # lokální import kvůli izolaci
+        self.stretch_scale: float = 1.0
+        self._stretch_decay: float = settings.PADDLE_STRETCH_DECAY  # faktor poklesu za frame
+        self._stretch_target: float = 1.0
+        self._stretch_hit_factor: float = settings.PADDLE_HIT_STRETCH
     
     def move_up(self) -> None:
         """Posune pálku nahoru o konstantní rychlost."""
@@ -67,18 +73,34 @@ class Paddle:
         """Posune pálku dolů o konstantní rychlost."""
         self.y += self.speed
 
-    def update(self, arena_height: int = 600) -> None:
+    def update(self, arena_height: int = 600, unrestricted: bool = True) -> None:
         """
-        Aktualizace pálky – omezí ji na prostor arény nebo zóny.
-        
+        Aktualizace pálky – nyní vždy umožňuje pohyb v celé výšce arény
+        (požadavek: neomezený pohyb v ose Y), přesto zachovává původní
+        hodnoty zone_top/zone_bottom pro kompatibilitu testů.
+
         Args:
-            arena_height: Výška arény (použije se pokud nejsou definovány zóny)
+            arena_height: Výška arény
         """
-        # Použij zóny pokud jsou definovány, jinak celou arénu
-        top_limit = self.zone_top if self.zone_top is not None else 0
-        bottom_limit = self.zone_bottom if self.zone_bottom is not None else arena_height
-        
-        self.clamp_to_arena(bottom_limit, top_limit)
+        if unrestricted:
+            # Ignoruj zóny – plný rozsah 0 .. arena_height
+            self.clamp_to_arena(arena_height, 0)
+        else:
+            # Respektuj zónu pokud definována
+            top_limit = self.zone_top if self.zone_top is not None else 0
+            bottom_limit = self.zone_bottom if self.zone_bottom is not None else arena_height
+            self.clamp_to_arena(bottom_limit, top_limit)
+
+        # Decay stretch efektu
+        if self.stretch_scale > 1.001:
+            self.stretch_scale = (self.stretch_scale - 1.0) * self._stretch_decay + 1.0
+        else:
+            self.stretch_scale = 1.0
+
+    def apply_hit_effect(self) -> None:
+        """Aktivuje krátký stretch efekt při zásahu míčku podle konfigurace."""
+        self.stretch_scale = self._stretch_hit_factor
+        self._stretch_target = 1.0
 
     def clamp_to_arena(self, arena_height: int, arena_top: int = 0) -> None:
         """Zabrání pálce opustit arénu nebo zónu.
@@ -116,8 +138,13 @@ class Paddle:
         V Phase 1–2 lze kreslit přímo zde.
         """
         import pygame
+        scaled_height = int(self.height * self.stretch_scale)
+        # Udrž střed pálky při stretch – posun Y, aby střed zůstal stabilní
+        center_y = self.y + self.height / 2
+        draw_y = int(center_y - scaled_height / 2)
         pygame.draw.rect(
             surface,
             (255, 255, 255),
-            pygame.Rect(self.x, self.y, self.width, self.height)
+            pygame.Rect(self.x, draw_y, self.width, scaled_height),
+            border_radius=3,
         )

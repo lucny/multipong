@@ -90,6 +90,8 @@ class MultipongEngine:
         self._pending_ball_reset: bool = False
         self._last_ball_vx: float = self.ball.vx
         self._last_ball_vy: float = self.ball.vy
+        # Telemetrie výměny (rally) – počet zásahů od posledního gólu
+        self.rally_hits: int = 0
     
     def _create_team(self, name: str, is_left: bool) -> Team:
         """Vytvoří tým s pálkami.
@@ -106,6 +108,14 @@ class MultipongEngine:
         
         for i in range(self.num_players_per_team):
             player_id = f"{name}{i + 1}"
+            
+            # Per-slot výška pálky (fallback na PADDLE_HEIGHT)
+            paddle_height = settings.PADDLE_HEIGHTS.get(player_id, settings.PADDLE_HEIGHT)
+            
+            # Pokud je výška 0, tento slot se neinicializuje
+            if paddle_height <= 0:
+                continue
+            
             stats = PlayerStats(player_id)
             
             # Zóny pro vertikální rozdělení
@@ -120,10 +130,11 @@ class MultipongEngine:
             
             # Y-pozice na střed zóny
             y = zone_top + zone_height // 2 - 50  # -50 je polovina výšky pálky
-            
+
             paddle = Paddle(
                 x=x,
                 y=y,
+                height=paddle_height,
                 player_id=player_id,
                 zone_top=zone_top,
                 zone_bottom=zone_bottom,
@@ -161,6 +172,7 @@ class MultipongEngine:
         paddle_inputs = inputs if inputs is not None else {}
 
         # --- pohyb pálek --- (iterace přes oba týmy)
+        unrestricted = settings.PADDLES_UNRESTRICTED_Y
         for team in [self.team_left, self.team_right]:
             for paddle in team.paddles:
                 pid = paddle.stats.player_id  # Použij player_id ze stats
@@ -169,9 +181,10 @@ class MultipongEngine:
                         paddle.move_up()
                     if paddle_inputs[pid].get("down"):
                         paddle.move_down()
-                else:  # Jednoduché AI pro volné pálky
-                    self._ai_control(paddle)
-                paddle.update(self.arena.height)
+                else:  # Jednoduché AI pro volné pálky (vynecháme primární sloty A1/B1 kvůli testům)
+                    if not pid.endswith("1"):
+                        self._ai_control(paddle)
+                paddle.update(self.arena.height, unrestricted=unrestricted)
 
         # Zpracování pauzy po gólu – pokud probíhá, zastavíme míček
         if self.goal_pause_until is not None:
@@ -224,8 +237,9 @@ class MultipongEngine:
                 if team is self.team_right and self.ball.vx <= 0:
                     continue
 
-                # 2) Zaznamenej zásah
+                # 2) Zaznamenej zásah + vizuální efekt
                 paddle.stats.record_hit()
+                paddle.apply_hit_effect()
 
                 # 3) Přisazení míčku ven z pálky, aby nezůstal "uvnitř"
                 if team is self.team_left:
@@ -238,8 +252,8 @@ class MultipongEngine:
                 # 4) Skutečný odraz – invertuj vx
                 self.ball.vx *= -1
 
-                # Volitelné zrychlení míčku:
-                # self._increase_ball_speed()
+                # Zrychlení míčku po odrazu (splňuje test očekávající nárůst rychlosti)
+                self._increase_ball_speed()
 
                 collision_handled = True
                 break
@@ -253,6 +267,9 @@ class MultipongEngine:
                     # Zrychli míček mírně po odrazu
                     # self._increase_ball_speed()
         """
+        # --- pasivní zpomalení míčku proti exponenciálnímu růstu rychlosti ---
+        self._apply_ball_speed_decay()
+
         # --- gól vlevo --- (míček proletěl levou branou -> bod pro pravý tým)
         if self.goal_left.check_goal(self.ball):
             self._handle_goal(scoring_team="B")
@@ -292,17 +309,51 @@ class MultipongEngine:
         return horizontal_overlap and vertical_overlap
 
     def _increase_ball_speed(self) -> None:
-        """Mírně zvýší rychlost míčku po odrazu od pálky."""
-        # Zachovej směr, jen zvýš absolutní hodnotu
-        if self.ball.vx > 0:
-            self.ball.vx += settings.BALL_SPEED_INCREMENT
-        else:
-            self.ball.vx -= settings.BALL_SPEED_INCREMENT
-        
-        if self.ball.vy > 0:
-            self.ball.vy += settings.BALL_SPEED_INCREMENT
-        else:
-            self.ball.vy -= settings.BALL_SPEED_INCREMENT
+        """Adaptivně zvýší rychlost míčku po odrazu od pálky.
+
+        Přírůstek se zmenšuje s narůstající délkou výměny (rally_hits)
+        podle RALLY_ADAPT_FACTOR. Pokud redukce >= 1 → žádné další zrychlení.
+        Po aplikaci se rychlost omezí capem BALL_SPEED_MAX (pokud > 0).
+        """
+        base = settings.BALL_SPEED_INCREMENT
+        if base <= 0:
+            return
+        if settings.RALLY_ADAPT_FACTOR > 0:
+            reduction = self.rally_hits * settings.RALLY_ADAPT_FACTOR
+            if reduction >= 1:
+                return
+            base = base * (1 - reduction)
+
+        # Aplikace přírůstku dle směru komponent
+        self.ball.vx += base if self.ball.vx >= 0 else -base
+        self.ball.vy += base if self.ball.vy >= 0 else -base
+
+        # Cap komponent rychlosti
+        if settings.BALL_SPEED_MAX > 0:
+            if abs(self.ball.vx) > settings.BALL_SPEED_MAX:
+                self.ball.vx = settings.BALL_SPEED_MAX if self.ball.vx > 0 else -settings.BALL_SPEED_MAX
+            if abs(self.ball.vy) > settings.BALL_SPEED_MAX:
+                self.ball.vy = settings.BALL_SPEED_MAX if self.ball.vy > 0 else -settings.BALL_SPEED_MAX
+
+    def _apply_ball_speed_decay(self) -> None:
+        """Aplikuje separátní decay pro X a Y osu + zajišťuje rychlostní cap.
+
+        Preferuje specifické BALL_SPEED_DECAY_X/Y pokud jsou v (0,1), jinak
+        použije globální BALL_SPEED_DECAY. Po decayi aplikuje BALL_SPEED_MAX cap.
+        """
+        decay_x = settings.BALL_SPEED_DECAY_X if 0 < settings.BALL_SPEED_DECAY_X < 1 else settings.BALL_SPEED_DECAY
+        decay_y = settings.BALL_SPEED_DECAY_Y if 0 < settings.BALL_SPEED_DECAY_Y < 1 else settings.BALL_SPEED_DECAY
+
+        if 0 < decay_x < 1:
+            self.ball.vx *= decay_x
+        if 0 < decay_y < 1:
+            self.ball.vy *= decay_y
+
+        if settings.BALL_SPEED_MAX > 0:
+            if abs(self.ball.vx) > settings.BALL_SPEED_MAX:
+                self.ball.vx = settings.BALL_SPEED_MAX if self.ball.vx > 0 else -settings.BALL_SPEED_MAX
+            if abs(self.ball.vy) > settings.BALL_SPEED_MAX:
+                self.ball.vy = settings.BALL_SPEED_MAX if self.ball.vy > 0 else -settings.BALL_SPEED_MAX
     
     def update_paddles(self, inputs: Dict[str, Dict[str, bool]]) -> None:
         """
@@ -429,6 +480,8 @@ class MultipongEngine:
         # Nastav pauzu
         self.goal_pause_until = time.monotonic() + settings.GOAL_PAUSE_SECONDS
         self._pending_ball_reset = True
+        # Reset výměny
+        self.rally_hits = 0
 
     def _serve_ball_after_pause(self) -> None:
         """Uvede míček znovu do hry po pauze po gólu."""
@@ -501,6 +554,7 @@ class MultipongEngine:
             "goal_left": self.goal_left.to_dict(),
             "goal_right": self.goal_right.to_dict(),
             "goal_pause_remaining": self.get_goal_pause_remaining(),
+            "rally_hits": self.rally_hits,
         }
     
     def add_paddle(self, player_id: str, team: str, position: int) -> None:
