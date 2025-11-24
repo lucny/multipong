@@ -14,32 +14,16 @@ if str(PROJECT_ROOT) not in sys.path:
 
 try:  # Preferovaný import balíčku
     from multipong.engine import MultipongEngine
+    from multipong.input.pygame_handler import PygameInputHandler
 except ImportError:  # pragma: no cover - fallback při lokálním běhu
     from multipong.engine.game_engine import MultipongEngine  # type: ignore
+    from multipong.input.pygame_handler import PygameInputHandler  # type: ignore
 
 # Konstanta FPS
 FPS = 60
 
 # Barvy (placeholder)
 COLOR_BACKGROUND = (30, 30, 30)
-
-
-def gather_inputs() -> Dict[str, Dict[str, bool]]:
-    """Sejme vstupy z klávesnice pro pálky.
-
-    Vrací slovník ve formátu: {"A1": {"up": bool, "down": bool}, "B1": {...}}
-    """
-    keys = pygame.key.get_pressed()
-    return {
-        "A1": {
-            "up": keys[pygame.K_w],
-            "down": keys[pygame.K_s],
-        },
-        "B1": {
-            "up": keys[pygame.K_UP],
-            "down": keys[pygame.K_DOWN],
-        },
-    }
 
 
 def main() -> None:
@@ -49,6 +33,9 @@ def main() -> None:
     # Rozměry z enginu (arénu vytvoříme nejdříve)
     engine = MultipongEngine(arena_width=1200, arena_height=800)
     engine.start()
+
+    # Vytvoř input handler (dependency injection)
+    input_handler = PygameInputHandler()
 
     screen = pygame.display.set_mode((engine.arena.width, engine.arena.height))
     pygame.display.set_caption("MULTIPONG – Client Demo")
@@ -64,8 +51,8 @@ def main() -> None:
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 running = False
 
-        # Vstupy
-        inputs = gather_inputs()
+        # Vstupy pomocí input handleru (dependency inversion)
+        inputs = input_handler.get_inputs()
 
         # Logika
         engine.update(inputs)

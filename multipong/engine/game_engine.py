@@ -7,6 +7,7 @@ from typing import Dict, Optional
 from .ball import Ball
 from .paddle import Paddle
 from .arena import Arena
+from multipong import settings
 
 
 class MultipongEngine:
@@ -72,25 +73,17 @@ class MultipongEngine:
     def update(self, inputs: Optional[Dict[str, Dict[str, bool]]] = None) -> None:
         """Aktualizační smyčka enginu.
 
-        Pokud nejsou předány vstupy (inputs is None), pokusí se přečíst stav klávesnice
-        přes pygame (W/S pro levou pálku, šipky nahoru/dolů pro pravou). To vnáší
-        závislost na pygame – tolerováno ve Phase 1–2.
+        Args:
+            inputs: Slovník vstupů od hráčů {"A1": {"up": bool, "down": bool}, ...}.
+                    Pokud je None, použije se prázdný slovník (žádné vstupy).
         """
-        # Volitelný vstup z pygame
+        # Výchozí prázdné vstupy
         if inputs is None:
-            try:  # pragma: no cover - přístup k reálné klávesnici mimo testy
-                import pygame
-                keys = pygame.key.get_pressed()
-                inputs = {
-                    "A1": {"up": keys[pygame.K_w], "down": keys[pygame.K_s]},
-                    "B1": {"up": keys[pygame.K_UP], "down": keys[pygame.K_DOWN]},
-                }
-            except Exception:
-                inputs = {"A1": {"up": False, "down": False}, "B1": {"up": False, "down": False}}
+            inputs = {"A1": {"up": False, "down": False}, "B1": {"up": False, "down": False}}
 
         # Pohyb pálek pomocí metod Paddle
         for pid, paddle in self.paddles.items():
-            player_inp = inputs.get(pid, {}) if inputs else {}
+            player_inp = inputs.get(pid, {})
             if player_inp.get("up"):
                 paddle.move_up()
             if player_inp.get("down"):
@@ -115,11 +108,17 @@ class MultipongEngine:
             self.ball.vx = abs(self.ball.vx)
             # Posuň míček ven z pálky, aby nedošlo k vícenásobnému odrazu
             self.ball.x = left.x + left.width + self.ball.radius
+            # Zrychli míček mírně po odrazu
+            self._increase_ball_speed()
 
         right = self.paddles.get("B1")
         if right and self._ball_hits_paddle(right):
             self.ball.vx = -abs(self.ball.vx)
             self.ball.x = right.x - self.ball.radius
+            self._increase_ball_speed()
+
+        # Kontrola gólů
+        self.check_score()
 
     def _ball_hits_paddle(self, paddle: Paddle) -> bool:
         """Jednoduchá detekce kolize míčku s pálkou.
@@ -132,6 +131,19 @@ class MultipongEngine:
             self.ball.x + self.ball.radius >= paddle.x and
             self.ball.x - self.ball.radius <= paddle.x + paddle.width
         )
+
+    def _increase_ball_speed(self) -> None:
+        """Mírně zvýší rychlost míčku po odrazu od pálky."""
+        # Zachovej směr, jen zvýš absolutní hodnotu
+        if self.ball.vx > 0:
+            self.ball.vx += settings.BALL_SPEED_INCREMENT
+        else:
+            self.ball.vx -= settings.BALL_SPEED_INCREMENT
+        
+        if self.ball.vy > 0:
+            self.ball.vy += settings.BALL_SPEED_INCREMENT
+        else:
+            self.ball.vy -= settings.BALL_SPEED_INCREMENT
     
     def update_paddles(self, inputs: Dict[str, Dict[str, bool]]) -> None:
         """
@@ -161,8 +173,19 @@ class MultipongEngine:
         Returns:
             "A" nebo "B" pro tým, který dostal gól, None jinak
         """
-        # TODO: Implementovat detekci gólu
-        pass
+        # Míček proletěl levou hranou -> gól pro B
+        if self.ball.x - self.ball.radius <= 0:
+            return "B"
+        # Míček proletěl pravou hranou -> gól pro A
+        elif self.ball.x + self.ball.radius >= self.arena.width:
+            return "A"
+        return None
+
+    def check_score(self) -> None:
+        """Zkontroluje gól a pokud nastal, zvýší skóre a resetuje míček."""
+        scoring_team = self.check_goals()
+        if scoring_team:
+            self.score_goal(scoring_team)
     
     def score_goal(self, scoring_team: str) -> None:
         """
@@ -171,14 +194,17 @@ class MultipongEngine:
         Args:
             scoring_team: Tým, který dal gól ("A" nebo "B")
         """
-        # TODO: Implementovat přičtení gólu
-        pass
+        self.score[scoring_team] += 1
+        self.reset_ball()
     
     def reset_ball(self) -> None:
-        """Reset míčku do středu arény + základní rychlost zachována."""
+        """Reset míčku do středu arény + základní rychlost obnovena."""
         cx, cy = self.arena.get_center()
         self.ball.x = cx
         self.ball.y = cy
+        # Obnov výchozí rychlost (ztratí zrychlení z odrazů)
+        self.ball.vx = settings.BALL_SPEED_X if self.ball.vx > 0 else -settings.BALL_SPEED_X
+        self.ball.vy = settings.BALL_SPEED_Y if self.ball.vy > 0 else -settings.BALL_SPEED_Y
     
     def start(self) -> None:
         """Spustí hru."""
@@ -190,9 +216,22 @@ class MultipongEngine:
         self.is_running = False
     
     def reset(self) -> None:
-        """Resetuje hru do výchozího stavu."""
-        # TODO: Implementovat reset hry
-        pass
+        """Resetuje hru do výchozího stavu (míček, pálky, skóre)."""
+        # Reset skóre
+        self.score = {"A": 0, "B": 0}
+        
+        # Reset míčku
+        self.reset_ball()
+        
+        # Reset pálek na výchozí pozice
+        center_y = self.arena.height / 2
+        left = self.paddles.get("A1")
+        if left:
+            left.y = center_y - left.height / 2
+        
+        right = self.paddles.get("B1")
+        if right:
+            right.y = center_y - right.height / 2
     
     def get_state(self) -> Dict:
         """
