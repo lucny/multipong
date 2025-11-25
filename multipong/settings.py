@@ -71,6 +71,9 @@ RALLY_ADAPT_FACTOR: float = float(_cfg("rally_adapt_factor", 0.05))
 # FPS pro klienta (zatím informativní)
 DEFAULT_FPS: int = int(_cfg("default_fps", 60))
 
+# Server tick rate (Hz) - frekvence game loop aktualizací
+SERVER_TICK_RATE: int = int(_cfg("server_tick_rate", 60))
+
 __all__ = [
 	"WINDOW_WIDTH",
 	"WINDOW_HEIGHT",
@@ -91,4 +94,5 @@ __all__ = [
 	"PADDLE_STRETCH_DECAY",
 	"RALLY_ADAPT_FACTOR",
 	"DEFAULT_FPS",
+	"SERVER_TICK_RATE",
 ]

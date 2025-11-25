@@ -19,5 +19,6 @@
   "ball_speed_max": 12.0,
   "paddle_hit_stretch": 1.3,
   "paddle_stretch_decay": 0.92,
-  "rally_adapt_factor": 0.05
+  "rally_adapt_factor": 0.05,
+  "server_tick_rate": 60
 }
