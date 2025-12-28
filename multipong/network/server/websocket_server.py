@@ -14,6 +14,7 @@ from .websocket_manager import WebSocketManager
 from .lobby_manager import LobbyManager
 from multipong.engine.game_engine import MultipongEngine
 from multipong.network.server.game_loop import run_game_loop
+from multipong import settings
 
 # Nastavení loggeru
 logging.basicConfig(
@@ -34,7 +35,11 @@ manager = WebSocketManager()
 lobby = LobbyManager()
 
 # Herní engine a sdílená mapa vstupů pro game loop
-engine = MultipongEngine()
+engine = MultipongEngine(
+    arena_width=settings.WINDOW_WIDTH,
+    arena_height=settings.WINDOW_HEIGHT,
+    num_players_per_team=settings.PADDLES_COUNT_PER_TEAM
+)
 _shared_player_inputs: Dict[str, Dict[str, bool]] = {}
 
 

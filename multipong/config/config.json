@@ -1,0 +1,43 @@
+{
+  "game": {
+    "arena_width": 1200,
+    "arena_height": 800,
+    "match_duration_seconds": 180
+  },
+
+  "paddles": {
+    "count_per_team": 4,
+    "width": 20,
+    "height": 100,
+    "speed": 6,
+    "heights": {
+      "A1": 100,
+      "A2": 0,
+      "A3": 100,
+      "A4": 100,
+      "B1": 100,
+      "B2": 100,
+      "B3": 0,
+      "B4": 100
+    }
+  },
+
+  "ball": {
+    "radius": 10,
+    "speed_x": 6,
+    "speed_y": 4,
+    "speed_increment_on_hit": 0.2
+  },
+
+  "goals": {
+    "size": 200
+  },
+
+  "server": {
+    "tick_rate": 60
+  },
+
+  "client": {
+    "fps": 60
+  }
+}

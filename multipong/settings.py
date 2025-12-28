@@ -1,78 +1,75 @@
 """Globální nastavení projektu MULTIPONG.
 
-Postupně přecházíme z pevných konstant na konfiguraci načítanou ze souboru
-`config.json` v kořenovém adresáři projektu.
-Pokud soubor neexistuje nebo klíč chybí, použijí se bezpečné defaulty.
+Konfigurace je nyní načítána z multipong/config/config.json pomocí config_loader.
+Všechny parametry jsou pro pohodlí zde znovu vystaveny.
 """
 
 from __future__ import annotations
 
-import json
-import pathlib
-from typing import Any, Dict
+from typing import Dict
 
-# ---------------------------------------------------------------------------
-# Načtení config.json (volitelné)
-# ---------------------------------------------------------------------------
-_CONFIG_PATH = pathlib.Path(__file__).resolve().parents[1] / "config.json"
-_raw_config: Dict[str, Any] = {}
-if _CONFIG_PATH.exists():  # pragma: no cover - jednoduché IO
-	try:
-		_raw_config = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-	except Exception:  # pragma: no cover - při chybě ignorujeme
-		_raw_config = {}
+# Načteme konfiguraci ze config_loader
+from multipong.config.config_loader import load_config, get as config_get
+
+# Inicializujeme konfiguraci
+_config = load_config()
 
 
-# Helper pro čtení hodnot s fallbackem
-def _cfg(key: str, default: Any) -> Any:
-	return _raw_config.get(key, default)
-
-
-# Rozměry okna / arény (musí ladit s inicializací MultipongEngine v klientovi)
-WINDOW_WIDTH: int = int(_cfg("window_width", 1200))
-WINDOW_HEIGHT: int = int(_cfg("window_height", 800))
+# Rozměry okna / arény
+WINDOW_WIDTH: int = int(config_get("game.arena_width", 1200))
+WINDOW_HEIGHT: int = int(config_get("game.arena_height", 800))
 
 # Výchozí parametry míčku
-BALL_RADIUS: int = 10
-BALL_SPEED_X: float = 5.0
-BALL_SPEED_Y: float = 5.0
-BALL_SPEED_INCREMENT: float = float(_cfg("ball_speed_increment", 0.2))  # Zvýšení rychlosti po každém odrazu od pálky
+BALL_RADIUS: int = int(config_get("ball.radius", 10))
+BALL_SPEED_X: float = float(config_get("ball.speed_x", 6.0))
+BALL_SPEED_Y: float = float(config_get("ball.speed_y", 4.0))
+BALL_SPEED_INCREMENT: float = float(config_get("ball.speed_increment_on_hit", 0.2))
 
-# Velikost branky (výška vertikálního pásma) – konfigurovatelné
-GOAL_SIZE: int = int(_cfg("goal_size", 200))
+# Velikost branky
+GOAL_SIZE: int = int(config_get("goals.size", 200))
 
 # Délka pauzy po gólu (sekundy)
-GOAL_PAUSE_SECONDS: float = float(_cfg("goal_pause_seconds", 1.0))
+GOAL_PAUSE_SECONDS: float = 1.0
 
-# Výška pálky (konfigurovatelná)
-PADDLE_HEIGHT: int = int(_cfg("paddle_height", 100))
+# Výška pálky
+PADDLE_HEIGHT: int = int(config_get("paddles.height", 100))
+
+# Šířka pálky
+PADDLE_WIDTH: int = int(config_get("paddles.width", 20))
+
+# Počet pálek na tým
+PADDLES_COUNT_PER_TEAM: int = int(config_get("paddles.count_per_team", 4))
+
+# Rychlost pálek
+PADDLE_SPEED: int = int(config_get("paddles.speed", 6))
 
 # Per-slot výšky pálek (pokud definováno)
-PADDLE_HEIGHTS: Dict[str, int] = {
-	k: int(v) for k, v in _cfg("paddle_heights", {}).items() if isinstance(v, (int, float))
-}
+PADDLE_HEIGHTS: Dict[str, int] = {}
+paddle_heights_config = config_get("paddles.heights", {})
+if isinstance(paddle_heights_config, dict):
+    PADDLE_HEIGHTS = {k: int(v) for k, v in paddle_heights_config.items() if isinstance(v, (int, float))}
 
 # Režim neomezeného pohybu pálek v ose Y
-PADDLES_UNRESTRICTED_Y: bool = bool(_cfg("paddles_unrestricted_y", False))
+PADDLES_UNRESTRICTED_Y: bool = False
 
-# Parametr pro postupné snižování rychlosti míčku (decay faktor za frame)
-BALL_SPEED_DECAY: float = float(_cfg("ball_speed_decay", 1.0))  # 1.0 = bez decaye (fallback)
-BALL_SPEED_DECAY_X: float = float(_cfg("ball_speed_decay_x", BALL_SPEED_DECAY))
-BALL_SPEED_DECAY_Y: float = float(_cfg("ball_speed_decay_y", BALL_SPEED_DECAY))
-BALL_SPEED_MAX: float = float(_cfg("ball_speed_max", 12.0))
+# Parametr pro postupné snižování rychlosti míčku
+BALL_SPEED_DECAY: float = 1.0
+BALL_SPEED_DECAY_X: float = 1.0
+BALL_SPEED_DECAY_Y: float = 1.0
+BALL_SPEED_MAX: float = 12.0
 
 # Stretch efekt konfigurace
-PADDLE_HIT_STRETCH: float = float(_cfg("paddle_hit_stretch", 1.3))
-PADDLE_STRETCH_DECAY: float = float(_cfg("paddle_stretch_decay", 0.92))
+PADDLE_HIT_STRETCH: float = 1.3
+PADDLE_STRETCH_DECAY: float = 0.92
 
-# Rally adapt faktor – ovlivňuje snížení přírůstku rychlosti s narůstající délkou výměny
-RALLY_ADAPT_FACTOR: float = float(_cfg("rally_adapt_factor", 0.05))
+# Rally adapt faktor
+RALLY_ADAPT_FACTOR: float = 0.05
 
-# FPS pro klienta (zatím informativní)
-DEFAULT_FPS: int = int(_cfg("default_fps", 60))
+# FPS pro klienta
+DEFAULT_FPS: int = int(config_get("client.fps", 60))
 
 # Server tick rate (Hz) - frekvence game loop aktualizací
-SERVER_TICK_RATE: int = int(_cfg("server_tick_rate", 60))
+SERVER_TICK_RATE: int = int(config_get("server.tick_rate", 60))
 
 __all__ = [
 	"WINDOW_WIDTH",
@@ -84,6 +81,9 @@ __all__ = [
 	"GOAL_SIZE",
 	"GOAL_PAUSE_SECONDS",
 	"PADDLE_HEIGHT",
+	"PADDLE_WIDTH",
+	"PADDLES_COUNT_PER_TEAM",
+	"PADDLE_SPEED",
 	"PADDLE_HEIGHTS",
 	"PADDLES_UNRESTRICTED_Y",
 	"BALL_SPEED_DECAY",
