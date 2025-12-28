@@ -5,6 +5,7 @@ Základní implementace s FastAPI + WebSocket endpointy.
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from typing import Dict, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -23,11 +24,58 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Seznam background tasků pro úklid při shutdownu
+_background_tasks: list[asyncio.Task] = []
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Spuštění a korektní ukončení background smyček bez deprecated on_event."""
+    logger.info("🚀 Spouštím MULTIPONG WebSocket server...")
+    logger.info(f"🎮 Lobby stav: {lobby.get_lobby_status()}")
+
+    # Aktivuj engine (reset míčku, zapne běh)
+    try:
+        engine.start()
+        logger.info("🎯 Engine start() dokončen")
+    except Exception as e:
+        logger.error(f"❌ Chyba při startu enginu: {e}")
+
+    # Spustit timeout checker
+    _background_tasks.append(asyncio.create_task(timeout_checker()))
+    logger.info("⏱️ Timeout checker aktivován (10s timeout)")
+
+    # Průběžná synchronizace vstupů z WebSocketManageru do sdílené mapy
+    async def _sync_inputs_loop():
+        while True:
+            await asyncio.sleep(0.01)  # ~100 Hz refresh vstupů
+            try:
+                inputs = manager.collect_inputs()
+                _shared_player_inputs.clear()
+                _shared_player_inputs.update(inputs)
+            except Exception as e:
+                logger.error(f"❌ Chyba při synchronizaci vstupů: {e}")
+
+    _background_tasks.append(asyncio.create_task(_sync_inputs_loop()))
+    logger.info("🎛️ Sync input loop spuštěn")
+
+    try:
+        yield
+    finally:
+        logger.info("🛑 Shutting down background tasks...")
+        for task in _background_tasks:
+            task.cancel()
+        if _background_tasks:
+            await asyncio.gather(*_background_tasks, return_exceptions=True)
+        _background_tasks.clear()
+
+
 # FastAPI aplikace
 app = FastAPI(
     title="MULTIPONG WebSocket Server",
     description="Server pro multiplayerový MULTIPONG (Phase 4)",
-    version="0.4.0"
+    version="0.4.0",
+    lifespan=lifespan,
 )
 
 # Globální instance manažerů
@@ -187,37 +235,6 @@ async def timeout_checker():
         if disconnected > 0:
             logger.warning(f"⏱️ Odpojeno {disconnected} neaktivních hráčů")
 
-
-@app.on_event("startup")
-async def startup_event():
-    """Spuštění background tasků při startu serveru."""
-    logger.info("🚀 Spouštím MULTIPONG WebSocket server...")
-    logger.info(f"🎮 Lobby stav: {lobby.get_lobby_status()}")
-    
-    # Aktivuj engine (reset míčku, zapne běh)
-    try:
-        engine.start()
-        logger.info("🎯 Engine start() dokončen")
-    except Exception as e:
-        logger.error(f"❌ Chyba při startu enginu: {e}")
-
-    # Spustit timeout checker
-    asyncio.create_task(timeout_checker())
-    logger.info("⏱️ Timeout checker aktivován (10s timeout)")
-
-    # Průběžná synchronizace vstupů z WebSocketManageru do sdílené mapy
-    async def _sync_inputs_loop():
-        while True:
-            await asyncio.sleep(0.01)  # ~100 Hz refresh vstupů
-            try:
-                inputs = manager.collect_inputs()
-                _shared_player_inputs.clear()
-                _shared_player_inputs.update(inputs)
-            except Exception as e:
-                logger.error(f"❌ Chyba při synchronizaci vstupů: {e}")
-
-    asyncio.create_task(_sync_inputs_loop())
-    logger.info("🎛️ Sync input loop spuštěn")
 
     # Spustit hlavní game loop (broadcast snapshotů)
     asyncio.create_task(run_game_loop(engine, manager, _shared_player_inputs))

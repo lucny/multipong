@@ -1,18 +1,40 @@
 """
-FastAPI hlavní aplikace pro MULTIPONG
+main.py – FastAPI aplikace pro MULTIPONG REST API.
+
+Spuštění:
+    uvicorn api.main:app --reload --port 9000
+
+API dokumentace:
+    http://localhost:9000/docs (Swagger UI)
+    http://localhost:9000/redoc (ReDoc)
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.routers import players
 
+from api.db import init_db
+from api.routers import players, matches, stats
+
+# Lifespan pro inicializaci DB (nahrazuje deprecated on_event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    print("✅ Databáze inicializována")
+    yield
+
+
+# Inicializace FastAPI aplikace
 app = FastAPI(
-    title="MULTIPONG API",
-    description="REST API pro statistiky a správu MULTIPONG hry",
-    version="0.1.0"
+    title="MULTIPONG Stats API",
+    description="REST API pro hráče, zápasy a statistiky MULTIPONG hry.",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
-# CORS middleware
+# CORS middleware - umožní přístup z webových aplikací
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,21 +43,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Registrace routerů
+# Zaregistrování routerů
 app.include_router(players.router)
+app.include_router(matches.router)
+app.include_router(stats.router)
 
 
+# Root endpoint
 @app.get("/")
-async def root():
-    """Základní endpoint."""
+def root():
+    """Root endpoint s informacemi o API."""
     return {
-        "message": "MULTIPONG API",
-        "version": "0.1.0",
-        "docs": "/docs"
+        "name": "MULTIPONG Stats API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "redoc": "/redoc",
+        "endpoints": {
+            "players": "/players",
+            "matches": "/matches",
+            "stats": "/stats"
+        }
     }
 
 
 @app.get("/health")
-async def health_check():
+def health_check():
     """Health check endpoint."""
-    return {"status": "healthy"}
+    return {"status": "ok"}

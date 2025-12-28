@@ -7,8 +7,7 @@ import asyncio
 import json
 import logging
 from typing import Optional, Callable, Dict
-import websockets
-from websockets.client import WebSocketClientProtocol
+from websockets.asyncio.client import ClientConnection, connect
 
 
 logger = logging.getLogger(__name__)
@@ -53,7 +52,7 @@ class WSClient:
         self.on_connected = on_connected
         self.on_chat = on_chat
         self.on_pong = on_pong
-        self.ws: Optional[WebSocketClientProtocol] = None
+        self.ws: Optional[ClientConnection] = None
         self.running = False
         self.assigned_slot: Optional[str] = None
         self._listen_task: Optional[asyncio.Task] = None
@@ -69,7 +68,7 @@ class WSClient:
             full_url = f"{self.url}/{self.player_id}"
             logger.info(f"Připojuji se k {full_url}...")
             
-            self.ws = await websockets.connect(full_url)
+            self.ws = await connect(full_url)
             self.running = True
             
             # Spuštění listen smyčky na pozadí

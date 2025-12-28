@@ -7,9 +7,9 @@ Tabulky:
 - PlayerStats: Statistiky jednotlivých hráčů v každém zápase
 """
 
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from api.db import Base
 
 
@@ -36,7 +36,8 @@ class Match(Base):
     __tablename__ = "matches"
 
     id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    # Používáme timezone-aware UTC čas
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     team_left_score = Column(Integer)  # Skóre levého týmu
     team_right_score = Column(Integer)  # Skóre pravého týmu
     duration_seconds = Column(Integer)  # Doba trvání zápasu
