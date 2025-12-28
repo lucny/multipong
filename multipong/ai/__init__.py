@@ -4,6 +4,8 @@ from .base_ai import BaseAI
 from .helpers import assign_ai_to_slots, assign_ai_to_team, clear_team_ai
 from .predictive_ai import PredictiveAI
 from .qlearning_ai import QLearningAI
+from .rl_env import RLPongEnv, State
+from .rl_utils import encode_state, get_q_value, update_q_value
 from .simple_ai import SimpleAI
 from .static_ai import StaticAI
 
@@ -13,9 +15,14 @@ __all__ = [
     "SimpleAI",
     "PredictiveAI",
     "QLearningAI",
+    "RLPongEnv",
+    "State",
+    "encode_state",
+    "get_q_value",
+    "update_q_value",
     "assign_ai_to_team",
     "assign_ai_to_slots",
     "clear_team_ai",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
