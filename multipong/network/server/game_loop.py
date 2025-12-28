@@ -10,6 +10,14 @@ from multipong.engine.game_engine import MultipongEngine
 from multipong.network.server.websocket_manager import WebSocketManager
 from multipong import settings
 
+# Databázové operace (pro ukládání výsledků)
+try:
+    from api.db import SessionLocal
+    from api import crud
+    ENABLE_DB_LOGGING = True
+except ImportError:
+    ENABLE_DB_LOGGING = False
+
 
 logger = logging.getLogger(__name__)
 
@@ -258,9 +266,60 @@ async def run_game_loop(
             await asyncio.sleep(tick_interval)
     
     except asyncio.CancelledError:
-        logger.info(f"🛑 run_game_loop zrušen (celkem ticků: {tick_count})")
+        logger.info("🛑 run_game_loop byl zrušen (CancelledError)")
         raise
     
     except Exception as e:
         logger.error(f"❌ Chyba v run_game_loop: {e}", exc_info=True)
         raise
+
+
+def save_match_results(engine: MultipongEngine, duration_seconds: int) -> None:
+    """
+    Uloží výsledky skončeného zápasu do databáze.
+    
+    Args:
+        engine: Instance herního enginu s konečnými výsledky
+        duration_seconds: Doba trvání zápasu v sekundách
+    """
+    if not ENABLE_DB_LOGGING:
+        logger.warning("⚠️ Databáze není dostupná - výsledky se neukládají")
+        return
+    
+    db = None
+    try:
+        db = SessionLocal()
+        
+        # 1. Vytvoříme zápas
+        match = crud.create_match(
+            db,
+            team_left_score=engine.team_left.score,
+            team_right_score=engine.team_right.score,
+            duration_seconds=duration_seconds
+        )
+        
+        # 2. Přidáme statistiky všech hráčů
+        all_paddles = engine.team_left.paddles + engine.team_right.paddles
+        
+        for paddle in all_paddles:
+            # Zajistíme, že hráč existuje v databázi
+            player = crud.get_or_create_player(db, paddle.player_id, paddle.stats.team)
+            
+            # Přidáme statistiku za tento zápas
+            crud.add_player_stats(
+                db,
+                match_id=match.id,
+                player_id=paddle.player_id,
+                hits=paddle.stats.hits,
+                goals_scored=paddle.stats.goals_scored,
+                goals_received=paddle.stats.goals_received
+            )
+        
+        logger.info(f"✅ Výsledky zápasu uloženy (match_id={match.id})")
+        
+    except Exception as e:
+        logger.error(f"❌ Chyba při ukládání výsledků: {e}", exc_info=True)
+    
+    finally:
+        if db:
+            db.close()
