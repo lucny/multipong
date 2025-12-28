@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 from typing import Optional, Callable, Dict
+import websockets.exceptions
 from websockets.asyncio.client import ClientConnection, connect
 
 
@@ -22,6 +23,7 @@ class WSClient:
         url: URL WebSocket serveru (např. "ws://localhost:8000/ws")
         player_id: ID hráče (např. "A1", "auto")
         on_snapshot: Callback funkce volaná při příjmu snapshotu
+        on_message: Callback funkce volaná při příjmu jakékoliv zprávy
         ws: WebSocket spojení
         running: Indikátor běhu listen smyčky
     """
@@ -33,7 +35,8 @@ class WSClient:
         on_snapshot: Optional[Callable[[dict], None]] = None,
         on_connected: Optional[Callable[[dict], None]] = None,
         on_chat: Optional[Callable[[str, str], None]] = None,
-        on_pong: Optional[Callable[[dict], None]] = None
+        on_pong: Optional[Callable[[dict], None]] = None,
+        on_message: Optional[Callable[[dict], None]] = None
     ):
         """
         Inicializace WebSocket klienta.
@@ -45,6 +48,7 @@ class WSClient:
             on_connected: Callback pro connected zprávy (dict) -> None
             on_chat: Callback pro chat zprávy (player_id, message) -> None
             on_pong: Callback pro pong zprávy (dict) -> None
+            on_message: Callback pro všechny zprávy (dict) -> None
         """
         self.url = url
         self.player_id = player_id
@@ -52,6 +56,7 @@ class WSClient:
         self.on_connected = on_connected
         self.on_chat = on_chat
         self.on_pong = on_pong
+        self.on_message = on_message
         self.ws: Optional[ClientConnection] = None
         self.running = False
         self.assigned_slot: Optional[str] = None
@@ -124,7 +129,11 @@ class WSClient:
                     logger.error(f"❌ Server error: {error_msg}")
                 
                 else:
-                    logger.warning(f"⚠️ Neznámý typ zprávy: {msg_type}")
+                    logger.debug(f"📨 Další typ zprávy: {msg_type}")
+                
+                # Volání obecného callbacku pro všechny zprávy
+                if self.on_message:
+                    self.on_message(data)
         
         except websockets.exceptions.ConnectionClosed:
             logger.info("🔴 Spojení ukončeno serverem")
@@ -190,6 +199,20 @@ class WSClient:
                 logger.debug("💓 Ping odeslán")
             except Exception as e:
                 logger.error(f"❌ Chyba při odesílání pingu: {e}")
+    
+    async def send_message(self, msg: dict) -> None:
+        """
+        Odesílá obecnou zprávu serveru.
+        
+        Args:
+            msg: Slovník se zprávou (musí obsahovat klíč "type")
+        """
+        if self.ws and self.running:
+            try:
+                await self.ws.send(json.dumps(msg))
+                logger.debug(f"📤 Zpráva odeslána: {msg.get('type')}")
+            except Exception as e:
+                logger.error(f"❌ Chyba při odesílání zprávy: {e}")
     
     async def disconnect(self) -> None:
         """Odpojí se od serveru."""

@@ -223,6 +223,66 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                 }
                 sent_count = await manager.broadcast(chat_broadcast)
                 logger.info(f"    📡 Chat rozeslán {sent_count} hráčům")
+            
+            elif msg_type == "join_lobby":
+                player_name = data.get("player_name", assigned_slot)
+                await lobby.lobby.add_player(assigned_slot, player_name)
+                logger.info(f"    👤 Hráč {player_name} vstoupil do lobby")
+                
+                # Broadcast lobby update
+                await manager.broadcast({
+                    "type": "lobby_update",
+                    **lobby.lobby.get_lobby_state()
+                })
+            
+            elif msg_type == "choose_slot":
+                slot = data.get("slot")
+                if await lobby.lobby.assign_slot(assigned_slot, slot):
+                    logger.info(f"    🎯 Hráč {assigned_slot} obsadil slot {slot}")
+                    await manager.broadcast({
+                        "type": "lobby_update",
+                        **lobby.lobby.get_lobby_state()
+                    })
+                else:
+                    await session.send_json({
+                        "type": "error",
+                        "message": f"Slot {slot} není dostupný"
+                    })
+            
+            elif msg_type == "set_ready":
+                is_ready = data.get("ready", False)
+                await lobby.lobby.set_ready(assigned_slot, is_ready)
+                logger.info(f"    ✓ Hráč {assigned_slot} ready: {is_ready}")
+                
+                # Broadcast lobby update
+                await manager.broadcast({
+                    "type": "lobby_update",
+                    **lobby.lobby.get_lobby_state()
+                })
+                
+                # Check if all ready to start match
+                if lobby.lobby.all_ready():
+                    logger.info("🚀 Všichni hráči ready! Startuji zápas...")
+                    await manager.broadcast({
+                        "type": "start_match",
+                        "countdown": 3
+                    })
+                    # Start countdown and game logic here
+            
+            elif msg_type == "set_ai_level":
+                slot = data.get("slot")
+                level = data.get("level", "simple")
+                if await lobby.lobby.set_ai_level(slot, level):
+                    logger.info(f"    🤖 AI slot {slot} nastaveno na {level}")
+                    await manager.broadcast({
+                        "type": "lobby_update",
+                        **lobby.lobby.get_lobby_state()
+                    })
+                else:
+                    await session.send_json({
+                        "type": "error",
+                        "message": f"Nelze nastavit AI level pro slot {slot}"
+                    })
                 
             else:
                 logger.warning(f"    ⚠️ Neznámý typ zprávy: {msg_type}")
