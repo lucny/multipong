@@ -6,9 +6,11 @@ Základní implementace s FastAPI + WebSocket endpointy.
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Dict, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .player_session import PlayerSession
 from .websocket_manager import WebSocketManager
@@ -77,6 +79,20 @@ app = FastAPI(
     version="0.4.0",
     lifespan=lifespan,
 )
+
+# Statické soubory pro frontend (htmx dashboard)
+frontend_dir = Path(__file__).resolve().parents[3] / "frontend"
+if frontend_dir.exists():
+    app.mount("/frontend", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+
+
+@app.get("/frontend")
+async def frontend_root():
+    """Podpora pro přístup na /frontend bez koncového lomítka."""
+    index_path = frontend_dir / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return {"detail": "Frontend not found"}
 
 # Globální instance manažerů
 manager = WebSocketManager()

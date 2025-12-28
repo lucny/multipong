@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MULTIPONG Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+  <header class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold">MULTIPONG Dashboard</h1>
+      <p class="text-slate-400 text-sm">Stats API UI (Phase 9)</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <button id="refreshAll" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-sm rounded-md">Refresh all</button>
+      <span id="status" class="text-xs text-slate-400">Ready</span>
+    </div>
+  </header>
+
+  <main class="p-6 space-y-6">
+    <!-- Summary cards -->
+    <section>
+      <h2 class="text-lg font-semibold mb-3">Summary</h2>
+      <div class="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" id="summaryCards">
+        <!-- populated by JS -->
+      </div>
+    </section>
+
+    <!-- Leaderboard -->
+    <section class="space-y-2">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold">Leaderboard (Top scorers)</h2>
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-slate-400" for="limit">Limit:</label>
+          <select id="leaderboardLimit" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+            <option>5</option>
+            <option selected>10</option>
+            <option>20</option>
+          </select>
+        </div>
+      </div>
+      <div class="overflow-hidden rounded-lg border border-slate-800">
+        <table class="min-w-full text-sm" id="leaderboardTable">
+          <thead class="bg-slate-800 text-slate-300">
+            <tr>
+              <th class="px-3 py-2 text-left">#</th>
+              <th class="px-3 py-2 text-left">Player</th>
+              <th class="px-3 py-2 text-left">Team</th>
+              <th class="px-3 py-2 text-right">Goals</th>
+              <th class="px-3 py-2 text-right">Received</th>
+              <th class="px-3 py-2 text-right">Hits</th>
+              <th class="px-3 py-2 text-right">Matches</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800" id="leaderboardBody">
+            <!-- rows -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Team stats -->
+    <section class="grid gap-4 grid-cols-1 md:grid-cols-2" id="teamStats">
+      <!-- cards -->
+    </section>
+
+    <!-- Matches list -->
+    <section class="space-y-2">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold">Latest Matches</h2>
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-slate-400" for="matchLimit">Limit:</label>
+          <select id="matchLimit" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+            <option>10</option>
+            <option selected>20</option>
+            <option>50</option>
+          </select>
+        </div>
+      </div>
+      <div class="overflow-hidden rounded-lg border border-slate-800">
+        <table class="min-w-full text-sm" id="matchesTable">
+          <thead class="bg-slate-800 text-slate-300">
+            <tr>
+              <th class="px-3 py-2 text-left">ID</th>
+              <th class="px-3 py-2 text-left">Timestamp</th>
+              <th class="px-3 py-2 text-right">Score</th>
+              <th class="px-3 py-2 text-right">Duration (s)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800" id="matchesBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Player lookup -->
+    <section class="space-y-2">
+      <div class="flex items-center gap-3 flex-wrap">
+        <h2 class="text-lg font-semibold">Player detail</h2>
+        <input id="playerInput" placeholder="Player ID (A1, B1...)" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm" />
+        <button id="playerLookup" class="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-sm rounded-md">Lookup</button>
+      </div>
+      <div id="playerDetail" class="border border-slate-800 rounded-lg p-4 bg-slate-800/40 text-sm text-slate-200">
+        Zadej player_id a stiskni Lookup.
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = ""; // relative to same origin
+
+    const statusEl = document.getElementById("status");
+    const summaryCards = document.getElementById("summaryCards");
+    const leaderboardBody = document.getElementById("leaderboardBody");
+    const leaderboardLimit = document.getElementById("leaderboardLimit");
+    const teamStatsEl = document.getElementById("teamStats");
+    const matchesBody = document.getElementById("matchesBody");
+    const matchLimit = document.getElementById("matchLimit");
+    const playerInput = document.getElementById("playerInput");
+    const playerDetail = document.getElementById("playerDetail");
+
+    const setStatus = (msg) => statusEl.textContent = msg;
+
+    async function fetchJson(path) {
+      const resp = await fetch(`${API_BASE}${path}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return resp.json();
+    }
+
+    function renderSummary(data) {
+      const cards = [
+        { label: "Total matches", value: data.total_matches },
+        { label: "Total players", value: data.total_players },
+        { label: "Total goals", value: data.total_goals },
+      ];
+      summaryCards.innerHTML = cards.map(c => `
+        <div class="bg-slate-800/60 border border-slate-800 rounded-lg p-4">
+          <div class="text-slate-400 text-sm">${c.label}</div>
+          <div class="text-2xl font-semibold mt-1">${c.value ?? 0}</div>
+        </div>
+      `).join("");
+    }
+
+    function renderLeaderboard(rows) {
+      leaderboardBody.innerHTML = rows.map((r, idx) => `
+        <tr class="hover:bg-slate-800/60">
+          <td class="px-3 py-2">${idx + 1}</td>
+          <td class="px-3 py-2 font-semibold">${r.player_id}</td>
+          <td class="px-3 py-2">${r.team ?? "-"}</td>
+          <td class="px-3 py-2 text-right">${r.total_goals_scored ?? 0}</td>
+          <td class="px-3 py-2 text-right">${r.total_goals_received ?? 0}</td>
+          <td class="px-3 py-2 text-right">${r.total_hits ?? 0}</td>
+          <td class="px-3 py-2 text-right">${r.matches_played ?? 0}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderTeamCard(team, stats) {
+      return `
+        <div class="bg-slate-800/60 border border-slate-800 rounded-lg p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="text-lg font-semibold">Team ${team}</div>
+            <div class="text-xs text-slate-400">matches: ${stats.matches_played ?? 0}</div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-sm text-slate-200">
+            <div>Goals scored: <span class="font-semibold">${stats.goals_scored ?? 0}</span></div>
+            <div>Goals received: <span class="font-semibold">${stats.goals_received ?? 0}</span></div>
+            <div>Hits: <span class="font-semibold">${stats.hits ?? 0}</span></div>
+            <div>Players: <span class="font-semibold">${stats.players_count ?? 0}</span></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderMatches(rows) {
+      matchesBody.innerHTML = rows.map(m => {
+        const ts = m.timestamp ? new Date(m.timestamp).toLocaleString() : "";
+        return `
+          <tr class="hover:bg-slate-800/60">
+            <td class="px-3 py-2">${m.id}</td>
+            <td class="px-3 py-2">${ts}</td>
+            <td class="px-3 py-2 text-right">${m.team_left_score} : ${m.team_right_score}</td>
+            <td class="px-3 py-2 text-right">${m.duration_seconds ?? "-"}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function renderPlayerDetail(data) {
+      if (!data || !data.player) {
+        playerDetail.innerHTML = "Hráč nenalezen.";
+        return;
+      }
+      const stats = data.stats || [];
+      const totalHits = stats.reduce((s, r) => s + (r.hits ?? 0), 0);
+      const goalsScored = stats.reduce((s, r) => s + (r.goals_scored ?? 0), 0);
+      const goalsReceived = stats.reduce((s, r) => s + (r.goals_received ?? 0), 0);
+      playerDetail.innerHTML = `
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-lg font-semibold">${data.player.player_id}</div>
+            <div class="text-slate-400 text-sm">Team ${data.player.team ?? "-"}</div>
+          </div>
+          <div class="text-sm text-slate-400">Matches: ${stats.length}</div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+          <div>Hits: <span class="font-semibold">${totalHits}</span></div>
+          <div>Goals scored: <span class="font-semibold">${goalsScored}</span></div>
+          <div>Goals received: <span class="font-semibold">${goalsReceived}</span></div>
+        </div>
+      `;
+    }
+
+    async function loadSummary() {
+      const data = await fetchJson("/stats/summary");
+      renderSummary(data);
+    }
+
+    async function loadLeaderboard() {
+      const limit = Number(leaderboardLimit.value) || 10;
+      const data = await fetchJson(`/stats/leaderboard?limit=${limit}`);
+      renderLeaderboard(data);
+    }
+
+    async function loadTeamStats() {
+      const [a, b] = await Promise.all([
+        fetchJson("/stats/team/A").catch(() => null),
+        fetchJson("/stats/team/B").catch(() => null),
+      ]);
+      teamStatsEl.innerHTML = [
+        renderTeamCard("A", a || {}),
+        renderTeamCard("B", b || {}),
+      ].join("");
+    }
+
+    async function loadMatches() {
+      const limit = Number(matchLimit.value) || 20;
+      const data = await fetchJson(`/matches/?limit=${limit}`);
+      renderMatches(data);
+    }
+
+    async function lookupPlayer() {
+      const pid = (playerInput.value || "").trim();
+      if (!pid) return;
+      setStatus("Loading player...");
+      try {
+        const data = await fetchJson(`/stats/player/${encodeURIComponent(pid)}`);
+        renderPlayerDetail(data);
+        setStatus("Ready");
+      } catch (e) {
+        playerDetail.innerHTML = "Hráč nenalezen nebo chyba.";
+        setStatus("Error");
+      }
+    }
+
+    async function refreshAll() {
+      setStatus("Loading...");
+      try {
+        await Promise.all([
+          loadSummary(),
+          loadLeaderboard(),
+          loadTeamStats(),
+          loadMatches(),
+        ]);
+        setStatus("Ready");
+      } catch (e) {
+        console.error(e);
+        setStatus("Error");
+      }
+    }
+
+    // Event wiring
+    document.getElementById("refreshAll").addEventListener("click", refreshAll);
+    leaderboardLimit.addEventListener("change", loadLeaderboard);
+    matchLimit.addEventListener("change", loadMatches);
+    document.getElementById("playerLookup").addEventListener("click", lookupPlayer);
+    playerInput.addEventListener("keydown", (e) => { if (e.key === "Enter") lookupPlayer(); });
+
+    // Initial load
+    refreshAll();
+  </script>
+</body>
+</html>
