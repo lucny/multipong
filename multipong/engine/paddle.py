@@ -3,8 +3,11 @@ Paddle class - Pálka pro MULTIPONG engine
 Logická reprezentace pálky - nezávislá na Pygame.
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 from .player_stats import PlayerStats
+
+if TYPE_CHECKING:  # typové importy pouze pro lint/IDE
+    from multipong.ai import BaseAI
 
 
 class Paddle:
@@ -34,6 +37,7 @@ class Paddle:
         zone_top: Optional[float] = None,
         zone_bottom: Optional[float] = None,
         stats: Optional[PlayerStats] = None,
+        ai: Optional["BaseAI"] = None,
     ):
         """
         Inicializace pálky.
@@ -58,6 +62,7 @@ class Paddle:
         self.zone_top = zone_top
         self.zone_bottom = zone_bottom
         self.stats = stats if stats is not None else PlayerStats(player_id)
+        self.ai = ai
         # Animace po zásahu (stretch efekt) – parametry z konfigurace
         from multipong import settings  # lokální import kvůli izolaci
         self.stretch_scale: float = 1.0
@@ -130,6 +135,7 @@ class Paddle:
             "zone_top": self.zone_top,
             "zone_bottom": self.zone_bottom,
             "stats": self.stats.to_dict() if self.stats else None,
+            "ai_class_name": self.ai.__class__.__name__ if self.ai else None,
         }
     
     def draw(self, surface) -> None:

@@ -1,45 +1,44 @@
-"""
-SimpleAI - Reaktivní AI pro MULTIPONG
-"""
+"""Jednoduchá heuristická AI pro MULTIPONG."""
 
-from typing import Tuple
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
+
+from .base_ai import Action, BaseAI
+
+if TYPE_CHECKING:  # pouze pro typovou kontrolu, aby se zamezilo cyklům importů
+    from multipong.engine import Arena, Ball, Paddle
 
 
-class SimpleAI:
-    """
-    Jednoduchá reaktivní AI.
-    Sleduje pozici míčku a pohybuje pálkou směrem k němu.
-    """
-    
-    def __init__(self, reaction_speed: float = 0.8):
-        """
-        Args:
-            reaction_speed: Rychlost reakce AI (0.0-1.0)
-        """
-        self.reaction_speed = reaction_speed
-    
-    def decide_action(
-        self, 
-        paddle_y: float, 
-        ball_y: float, 
-        paddle_height: float
-    ) -> str:
-        """
-        Rozhodne o akci na základě pozice míčku.
-        
-        Args:
-            paddle_y: Y pozice pálky
-            ball_y: Y pozice míčku
-            paddle_height: Výška pálky
-        
-        Returns:
-            "up", "down", nebo "stay"
-        """
-        paddle_center = paddle_y + paddle_height / 2
-        
-        if ball_y < paddle_center - 5:
+class SimpleAI(BaseAI):
+    """Sleduje vertikální pozici míčku a drží pálku u středu míčku."""
+
+    def __init__(self, reaction_speed: float = 1.0, dead_zone: float = 5.0) -> None:
+        self.reaction_speed = max(reaction_speed, 0.01)
+        self.dead_zone = max(dead_zone, 0.0)
+
+    def decide(self, paddle: "Paddle", ball: "Ball", arena: "Arena") -> Action:  # noqa: ARG002
+        center = paddle.y + paddle.height / 2
+        target_y = ball.y
+        effective_dead_zone = self.dead_zone / self.reaction_speed
+
+        if center > target_y + effective_dead_zone:
+            return {"up": True, "down": False}
+        if center < target_y - effective_dead_zone:
+            return {"up": False, "down": True}
+        return {"up": False, "down": False}
+
+    # Kompatibilní alias pro původní API ("up"/"down"/"stay")
+    def decide_action(self, paddle_y: float, ball_y: float, paddle_height: float) -> str:
+        action = self.decide(
+            SimpleNamespace(y=paddle_y, height=paddle_height),
+            SimpleNamespace(y=ball_y),
+            SimpleNamespace(),
+        )
+
+        if action.get("up"):
             return "up"
-        elif ball_y > paddle_center + 5:
+        if action.get("down"):
             return "down"
-        else:
-            return "stay"
+        return "stay"

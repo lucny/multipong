@@ -3,7 +3,7 @@ MultipongEngine - Hlavní herní engine pro MULTIPONG
 Logické jádro hry - nezávislé na Pygame.
 """
 
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 from .ball import Ball
 from .paddle import Paddle
 from .arena import Arena
@@ -176,14 +176,26 @@ class MultipongEngine:
         for team in [self.team_left, self.team_right]:
             for paddle in team.paddles:
                 pid = paddle.stats.player_id  # Použij player_id ze stats
-                if pid in paddle_inputs:  # Manuální vstup hráče
-                    if paddle_inputs[pid].get("up"):
-                        paddle.move_up()
-                    if paddle_inputs[pid].get("down"):
-                        paddle.move_down()
-                else:  # Jednoduché AI pro volné pálky (vynecháme primární sloty A1/B1 kvůli testům)
-                    if not pid.endswith("1"):
-                        self._ai_control(paddle)
+                up, down = False, False
+
+                if getattr(paddle, "ai", None) is not None:
+                    action = paddle.ai.decide(paddle, self.ball, self.arena)
+                    up = bool(action.get("up"))
+                    down = bool(action.get("down"))
+                elif pid in paddle_inputs:  # Manuální vstup hráče
+                    up = paddle_inputs[pid].get("up", False)
+                    down = paddle_inputs[pid].get("down", False)
+                elif not pid.endswith("1"):
+                    up, down = self._ai_control(paddle)
+
+                if up and down:
+                    down = False  # neutralizuj konfliktní vstupy
+
+                if up:
+                    paddle.move_up()
+                elif down:
+                    paddle.move_down()
+
                 paddle.update(self.arena.height, unrestricted=unrestricted)
 
         # Zpracování pauzy po gólu – pokud probíhá, zastavíme míček
@@ -240,6 +252,12 @@ class MultipongEngine:
                 # 2) Zaznamenej zásah + vizuální efekt
                 paddle.stats.record_hit()
                 paddle.apply_hit_effect()
+
+                # 2b) RL reward pro AI agenty – zásah
+                if hasattr(paddle, "ai") and paddle.ai is not None:
+                    from multipong.ai import QLearningAI
+                    if isinstance(paddle.ai, QLearningAI):
+                        paddle.ai.give_reward(paddle, self.ball, reward=1.0)
 
                 # 3) Přisazení míčku ven z pálky, aby nezůstal "uvnitř"
                 if team is self.team_left:
@@ -439,17 +457,14 @@ class MultipongEngine:
     # ------------------------------------------------------------------
     # Nové pomocné metody (AI + pauza po gólu)
     # ------------------------------------------------------------------
-    def _ai_control(self, paddle: Paddle) -> None:
-        """Jednoduché AI: pálka sleduje vertikální pozici míčku.
-
-        Pálka se snaží vycentrovat na míček v rámci své zóny.
-        """
+    def _ai_control(self, paddle: Paddle) -> Tuple[bool, bool]:
+        """Fallback AI: sleduje pozici míčku pro neobsazené sloty."""
         target = self.ball.y - paddle.height / 2
-        # Pokud je střed pálky pod cílem → posun nahoru / dolů
         if paddle.y < target:
-            paddle.y += paddle.speed
-        elif paddle.y > target:
-            paddle.y -= paddle.speed
+            return False, True
+        if paddle.y > target:
+            return True, False
+        return False, False
 
     def _handle_goal(self, scoring_team: str) -> None:
         """Ošetří gól: zvýší skóre, připraví pauzu před znovu-vhozením.
@@ -462,9 +477,36 @@ class MultipongEngine:
         if scoring_team == "A":
             self.team_left.add_score()
             self.score["A"] = self.team_left.score
+            defending_team = self.team_right
         elif scoring_team == "B":
             self.team_right.add_score()
             self.score["B"] = self.team_right.score
+            defending_team = self.team_left
+        else:
+            defending_team = None
+
+        # RL reward: penalizovat obranu za obdržený gól
+        if defending_team:
+            for paddle in defending_team.paddles:
+                if hasattr(paddle, "ai") and paddle.ai is not None:
+                    from multipong.ai import QLearningAI
+                    if isinstance(paddle.ai, QLearningAI):
+                        paddle.ai.give_reward(paddle, self.ball, reward=-3.0)
+
+        # RL reward: odměnit útok za vstřelený gól
+        if scoring_team == "A":
+            attacking_team = self.team_left
+        elif scoring_team == "B":
+            attacking_team = self.team_right
+        else:
+            attacking_team = None
+
+        if attacking_team:
+            for paddle in attacking_team.paddles:
+                if hasattr(paddle, "ai") and paddle.ai is not None:
+                    from multipong.ai import QLearningAI
+                    if isinstance(paddle.ai, QLearningAI):
+                        paddle.ai.give_reward(paddle, self.ball, reward=5.0)
 
         # Ulož poslední směr pro budoucí invertaci
         self._last_ball_vx = self.ball.vx if self.ball.vx != 0 else self._last_ball_vx
