@@ -136,7 +136,11 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                 
             elif msg_type == "ping":
                 logger.debug(f"    💓 Ping od {assigned_slot}")
-                await session.send_json({"type": "pong"})
+                pong_msg = {"type": "pong"}
+                ping_id = data.get("ping_id")
+                if ping_id:
+                    pong_msg["ping_id"] = ping_id
+                await session.send_json(pong_msg)
                 
             elif msg_type == "chat":
                 message = data.get("message", "")

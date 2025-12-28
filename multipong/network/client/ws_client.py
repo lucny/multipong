@@ -33,7 +33,8 @@ class WSClient:
         player_id: str,
         on_snapshot: Optional[Callable[[dict], None]] = None,
         on_connected: Optional[Callable[[dict], None]] = None,
-        on_chat: Optional[Callable[[str, str], None]] = None
+        on_chat: Optional[Callable[[str, str], None]] = None,
+        on_pong: Optional[Callable[[dict], None]] = None
     ):
         """
         Inicializace WebSocket klienta.
@@ -44,12 +45,14 @@ class WSClient:
             on_snapshot: Callback pro snapshot zprávy (dict) -> None
             on_connected: Callback pro connected zprávy (dict) -> None
             on_chat: Callback pro chat zprávy (player_id, message) -> None
+            on_pong: Callback pro pong zprávy (dict) -> None
         """
         self.url = url
         self.player_id = player_id
         self.on_snapshot = on_snapshot
         self.on_connected = on_connected
         self.on_chat = on_chat
+        self.on_pong = on_pong
         self.ws: Optional[WebSocketClientProtocol] = None
         self.running = False
         self.assigned_slot: Optional[str] = None
@@ -114,6 +117,8 @@ class WSClient:
                 elif msg_type == "pong":
                     # Odpověď na ping
                     logger.debug("💓 Pong přijat")
+                    if self.on_pong:
+                        self.on_pong(data)
                 
                 elif msg_type == "error":
                     error_msg = data.get("message", "Unknown error")
@@ -170,10 +175,17 @@ class WSClient:
             except Exception as e:
                 logger.error(f"❌ Chyba při odesílání chatu: {e}")
     
-    async def send_ping(self) -> None:
-        """Odešle ping zprávu pro keep-alive."""
+    async def send_ping(self, ping_id: Optional[str] = None) -> None:
+        """
+        Odešle ping zprávu pro keep-alive a latency měření.
+        
+        Args:
+            ping_id: Volitelné ID pro tracování odpovědi (latency tracking)
+        """
         if self.ws and self.running:
             msg = {"type": "ping"}
+            if ping_id:
+                msg["ping_id"] = ping_id
             try:
                 await self.ws.send(json.dumps(msg))
                 logger.debug("💓 Ping odeslán")
