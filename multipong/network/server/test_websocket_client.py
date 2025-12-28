@@ -5,7 +5,7 @@ Odesílá testovací zprávy a kontroluje, zda server přijímá.
 
 import asyncio
 import json
-import websockets
+from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
 
@@ -16,7 +16,7 @@ async def test_websocket():
     print("🔌 Připojuji se k serveru...")
     
     try:
-        async with websockets.connect(uri) as websocket:
+        async with connect(uri) as websocket:
             print("✅ Připojeno!")
             
             # Test 1: Input zpráva

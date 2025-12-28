@@ -3,9 +3,9 @@ WebSocket klient pro připojení k MULTIPONG serveru
 """
 
 import asyncio
-import websockets
 import json
 from typing import Optional, Callable
+from websockets.asyncio.client import ClientConnection, connect
 
 
 class MultiPongClient:
@@ -15,14 +15,14 @@ class MultiPongClient:
     
     def __init__(self, server_url: str = "ws://localhost:8765"):
         self.server_url = server_url
-        self.websocket: Optional[websockets.WebSocketClientProtocol] = None
+        self.websocket: Optional[ClientConnection] = None
         self.connected = False
         self.player_id: Optional[str] = None
     
     async def connect(self) -> bool:
         """Připojí se k serveru."""
         try:
-            self.websocket = await websockets.connect(self.server_url)
+            self.websocket = await connect(self.server_url)
             self.connected = True
             return True
         except Exception as e:
