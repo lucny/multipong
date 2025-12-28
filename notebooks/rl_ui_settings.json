@@ -1,0 +1,7 @@
+{
+  "ui_demo_episodes": 28,
+  "ui_policy": "Heuristic",
+  "ui_num_bins": 8,
+  "ui_policy_episodes": 10,
+  "ui_cmp_epsilon": 0.0
+}

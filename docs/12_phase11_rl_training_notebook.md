@@ -381,4 +381,36 @@ V této fázi jsme:
 
 Tato fáze už překračuje běžnou středoškolskou úroveň, ale právě proto je skvělá pro talentované studenty a projektové práce.
 
+---
+
+## 🛠️ 9. Troubleshooting: „ModuleNotFoundError: No module named 'multipong'“
+
+Pokud v notebooku vidíš chybu, že modul `multipong` neexistuje, zpravidla notebook běží na jiném Pythonu než tvé projektové virtualenv (`.venv`). Máš dvě rychlé možnosti:
+
+- **Rychlý fix v notebooku**: Přidej na úplný začátek nový kódový cell, který přidá kořen projektu do `sys.path`.
+
+```python
+# Ensure project root is importable from notebooks/
+import sys
+from pathlib import Path
+proj_root = Path.cwd().parent  # notebooks/ -> project root
+if str(proj_root) not in sys.path:
+    sys.path.insert(0, str(proj_root))
+print("Python exec:", sys.executable)
+print("Added to sys.path:", proj_root)
+```
+
+- **Správný kernel z `.venv`**: Zaregistruj Jupyter kernel ze svého virtualenv a v notebooku ho vyber.
+
+Spusť v PowerShellu v kořeni projektu:
+
+```powershell
+D:/projekty/multipong/.venv/Scripts/python.exe -m pip install ipykernel
+D:/projekty/multipong/.venv/Scripts/python.exe -m ipykernel install --user --name multipong-venv --display-name "Python (.venv) multipong"
+```
+
+Poté v Jupyteru vpravo nahoře přepni kernel na "Python (.venv) multipong". 
+
+Poznámka: `pip install -e .` (editable instalace) může v tomto projektu selhat kvůli vícero top-level složkám. Použij výše uvedený `sys.path` fix nebo kernel z `.venv`.
+
 
