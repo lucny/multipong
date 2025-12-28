@@ -46,10 +46,18 @@ class Team:
             "score": self.score,
             "paddles": [
                 {
+                    # Pozice a rozměry pro renderer/klienta
                     "x": p.x,
                     "y": p.y,
                     "width": p.width,
                     "height": p.height,
+                    # Identifikátor hráče na top-level pro snadnější práci na klientu
+                    "player_id": getattr(p, "player_id", getattr(p.stats, "player_id", "")),
+                    # Plochá statistická pole (zachována i v nested "stats" pro kompatibilitu testů)
+                    "hits": getattr(p.stats, "hits", 0) if hasattr(p, "stats") else 0,
+                    "goals_scored": getattr(p.stats, "goals_scored", 0) if hasattr(p, "stats") else 0,
+                    "goals_received": getattr(p.stats, "goals_received", 0) if hasattr(p, "stats") else 0,
+                    # Původní vnořená struktura statistik kvůli existujícím testům a kompatibilitě
                     "stats": p.stats.to_dict() if hasattr(p, 'stats') else None,
                 }
                 for p in self.paddles

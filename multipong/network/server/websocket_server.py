@@ -12,6 +12,8 @@ from fastapi.responses import HTMLResponse
 from .player_session import PlayerSession
 from .websocket_manager import WebSocketManager
 from .lobby_manager import LobbyManager
+from multipong.engine.game_engine import MultipongEngine
+from multipong.network.server.game_loop import run_game_loop
 
 # Nastavení loggeru
 logging.basicConfig(
@@ -30,6 +32,10 @@ app = FastAPI(
 # Globální instance manažerů
 manager = WebSocketManager()
 lobby = LobbyManager()
+
+# Herní engine a sdílená mapa vstupů pro game loop
+engine = MultipongEngine()
+_shared_player_inputs: Dict[str, Dict[str, bool]] = {}
 
 
 @app.get("/")
@@ -179,9 +185,34 @@ async def startup_event():
     logger.info("🚀 Spouštím MULTIPONG WebSocket server...")
     logger.info(f"🎮 Lobby stav: {lobby.get_lobby_status()}")
     
+    # Aktivuj engine (reset míčku, zapne běh)
+    try:
+        engine.start()
+        logger.info("🎯 Engine start() dokončen")
+    except Exception as e:
+        logger.error(f"❌ Chyba při startu enginu: {e}")
+
     # Spustit timeout checker
     asyncio.create_task(timeout_checker())
     logger.info("⏱️ Timeout checker aktivován (10s timeout)")
+
+    # Průběžná synchronizace vstupů z WebSocketManageru do sdílené mapy
+    async def _sync_inputs_loop():
+        while True:
+            await asyncio.sleep(0.01)  # ~100 Hz refresh vstupů
+            try:
+                inputs = manager.collect_inputs()
+                _shared_player_inputs.clear()
+                _shared_player_inputs.update(inputs)
+            except Exception as e:
+                logger.error(f"❌ Chyba při synchronizaci vstupů: {e}")
+
+    asyncio.create_task(_sync_inputs_loop())
+    logger.info("🎛️ Sync input loop spuštěn")
+
+    # Spustit hlavní game loop (broadcast snapshotů)
+    asyncio.create_task(run_game_loop(engine, manager, _shared_player_inputs))
+    logger.info("🎮 Game loop spuštěn")
 
 
 @app.get("/test-client")
